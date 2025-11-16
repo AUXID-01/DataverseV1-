@@ -9,15 +9,38 @@ router = APIRouter(prefix="/queries", tags=["Queries"])
 async def execute_query(request: QueryRequest, background_tasks: BackgroundTasks):
     """
     Accepts a QueryRequest and triggers execution.
+    For async_mode=False, executes synchronously and returns results immediately.
+    For async_mode=True, queues the query and returns query_id.
     """
     try:
         query_id = await run_query(request)
-        return QueryResponse(
-            query_id=query_id,
-            status="queued",
-            results=None,
-            result_count=None
-        )
+        
+        # If async mode, return immediately with queued status
+        if request.async_mode:
+            return QueryResponse(
+                query_id=query_id,
+                status="queued",
+                results=None,
+                result_count=None
+            )
+        
+        # For sync mode, fetch and return results immediately
+        result = await get_query_results(query_id)
+        if result:
+            return QueryResponse(
+                query_id=query_id,
+                status="done",
+                results=result.get("results", []),
+                result_count=result.get("result_count", 0)
+            )
+        else:
+            # If results not found yet, return queued status
+            return QueryResponse(
+                query_id=query_id,
+                status="processing",
+                results=None,
+                result_count=None
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
